@@ -1,49 +1,140 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
-    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
-    <style>
-        body { margin: 0; padding: 0; }
-        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-        /* Your Custom Pin Design */
-        .marker {
-            width: 50px; height: 50px;
-            border-radius: 50%;
-            border: 4px solid; /* Color set by JS */
-            background-size: cover;
-            background-position: center;
-            box-shadow: 0px 3px 6px rgba(0,0,0,0.3);
-        }
-    </style>
-</head>
-<body>
-<div id='map'></div>
-<script>
-    // 1. Get parameters from URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const lat = parseFloat(urlParams.get('lat'));
-    const lon = parseFloat(urlParams.get('lon'));
-    const img = urlParams.get('img');
-    const color = urlParams.get('color') || 'green';
-    const token = urlParams.get('token');
+<!DOCTYPE html> 
+<html> 
+<head> 
+    <meta charset="utf-8"> 
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script> 
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" /> 
 
-    mapboxgl.accessToken = token;
-    const map = new mapboxgl.Map({
-        container: 'map',
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: [lon, lat],
-        zoom: 14
-    });
+    <style> 
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Helvetica Neue', Arial, sans-serif; 
+        } 
 
-    // 2. Create the HTML element for the marker
-    const el = document.createElement('div');
-    el.className = 'marker';
-    el.style.backgroundImage = `url(${img})`;
-    el.style.borderColor = color;
+        #map { 
+            position: absolute; 
+            top: 0; 
+            bottom: 0; 
+            width: 100%; 
+        } 
+          
+        /* Container for the pin and labels */ 
+        .marker-container { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            width: 140px; 
+        } 
 
-    // 3. Add to map
-    new mapboxgl.Marker(el).setLngLat([lon, lat]).addTo(map);
-</script>
-</body>
+        /* Driver Image Pin — slimmed border (Option A) */ 
+        .marker-image { 
+            width: 60px; 
+            height: 60px; 
+            border-radius: 50%; 
+            border: 6px solid;              /* Slimmed down from 16px */
+            background-size: cover; 
+            background-position: center; 
+            background-color: #fff; 
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.4); 
+            margin-bottom: 8px; 
+            box-sizing: border-box; 
+        } 
+
+        /* Label Styling */ 
+        .label-name { 
+            background: rgba(255, 255, 255, 0.95); 
+            color: #1a1a1a; 
+            font-weight: 800; 
+            font-size: 13px; 
+            padding: 3px 8px; 
+            border-radius: 4px; 
+            text-align: center; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2); 
+            white-space: nowrap; 
+        } 
+
+        .label-location { 
+            color: #fff; 
+            background: rgba(0, 0, 0, 0.7); 
+            font-size: 10px; 
+            padding: 2px 5px; 
+            border-radius: 3px; 
+            margin-top: 3px; 
+            text-align: center; 
+            max-width: 100%; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            font-weight: 500;
+        } 
+    </style> 
+</head> 
+
+<body> 
+<div id="map"></div> 
+
+<script> 
+    const urlParams = new URLSearchParams(window.location.search); 
+    const token = urlParams.get('token'); 
+    const driversData = urlParams.get('data'); 
+
+    mapboxgl.accessToken = token; 
+
+    const map = new mapboxgl.Map({ 
+        container: 'map', 
+        style: 'mapbox://styles/mapbox/streets-v12', 
+        center: [20.4573, 44.8167], 
+        zoom: 12 
+    }); 
+
+    if (driversData) { 
+        try { 
+            const drivers = JSON.parse(decodeURIComponent(driversData)); 
+            const bounds = new mapboxgl.LngLatBounds(); 
+
+            drivers.forEach(driver => { 
+                const container = document.createElement('div'); 
+                container.className = 'marker-container'; 
+
+                const imgDiv = document.createElement('div'); 
+                imgDiv.className = 'marker-image'; 
+                imgDiv.style.backgroundImage = `url(${driver.img})`; 
+                imgDiv.style.borderColor = driver.color || '#34A853'; 
+
+                const nameDiv = document.createElement('div'); 
+                nameDiv.className = 'label-name'; 
+                nameDiv.innerText = driver.name; 
+
+                const locDiv = document.createElement('div'); 
+                locDiv.className = 'label-location'; 
+                locDiv.innerText = driver.location; 
+
+                container.appendChild(imgDiv); 
+                container.appendChild(nameDiv); 
+                container.appendChild(locDiv); 
+
+                const coords = [
+                    parseFloat(driver.lon), 
+                    parseFloat(driver.lat)
+                ]; 
+
+                new mapboxgl.Marker({ 
+                    element: container, 
+                    anchor: 'bottom' 
+                }) 
+                .setLngLat(coords) 
+                .addTo(map); 
+
+                bounds.extend(coords); 
+            }); 
+
+            if (drivers.length > 0) { 
+                map.fitBounds(bounds, { padding: 100, maxZoom: 15 }); 
+            } 
+        } catch (e) { 
+            console.error("Error parsing driver data", e); 
+        } 
+    } 
+</script> 
+</body> 
 </html>
