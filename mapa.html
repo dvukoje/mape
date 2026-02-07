@@ -99,12 +99,14 @@
                 const imgDiv = document.createElement('div'); 
                 imgDiv.className = 'marker-image'; 
                 imgDiv.style.backgroundImage = `url(${driver.img})`; 
-                imgDiv.style.borderColor = driver.color || '#34A853'; 
+                const markerColor = driver.color || '#34A853';
+                imgDiv.style.borderColor = markerColor; 
 
                 const nameDiv = document.createElement('div'); 
                 nameDiv.className = 'label-name'; 
                 nameDiv.innerText = driver.name; 
-                nameDiv.style.backgroundColor = driver.color || 'rgba(255, 255, 255, 0.95)';
+                nameDiv.style.backgroundColor = markerColor;
+                nameDiv.style.color = '#ffffff';
 
                 const locDiv = document.createElement('div'); 
                 locDiv.className = 'label-location'; 
