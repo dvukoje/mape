@@ -78,6 +78,23 @@
     const token = urlParams.get('token'); 
     const driversData = urlParams.get('data'); 
 
+    function resolveMarkerColor(inputColor) {
+        const fallback = '#34A853';
+        if (typeof inputColor !== 'string') return fallback;
+
+        const raw = inputColor.trim();
+        if (!raw) return fallback;
+
+        // Support hex values that arrive without "#", e.g. "34A853".
+        const candidate = /^[0-9a-fA-F]{3,8}$/.test(raw) ? `#${raw}` : raw;
+
+        const probe = document.createElement('div');
+        probe.style.color = '';
+        probe.style.color = candidate;
+
+        return probe.style.color ? candidate : fallback;
+    }
+
     mapboxgl.accessToken = token; 
 
     const map = new mapboxgl.Map({ 
@@ -99,13 +116,14 @@
                 const imgDiv = document.createElement('div'); 
                 imgDiv.className = 'marker-image'; 
                 imgDiv.style.backgroundImage = `url(${driver.img})`; 
-                const markerColor = driver.color || '#34A853';
+                const markerColor = resolveMarkerColor(driver.color);
                 imgDiv.style.borderColor = markerColor; 
 
                 const nameDiv = document.createElement('div'); 
                 nameDiv.className = 'label-name'; 
                 nameDiv.innerText = driver.name; 
                 nameDiv.style.backgroundColor = markerColor;
+                nameDiv.style.setProperty('background', markerColor, 'important');
                 nameDiv.style.color = '#ffffff';
 
                 const locDiv = document.createElement('div'); 
