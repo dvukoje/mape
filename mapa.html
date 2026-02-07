@@ -77,6 +77,17 @@
     const urlParams = new URLSearchParams(window.location.search); 
     const token = urlParams.get('token'); 
     const driversData = urlParams.get('data'); 
+    const showImage = parseBooleanParam(urlParams.get('slika'), true);
+    const showName = parseBooleanParam(urlParams.get('ime'), true);
+    const showLocation = parseBooleanParam(urlParams.get('lokacija'), true);
+
+    function parseBooleanParam(value, defaultValue) {
+        if (value === null) return defaultValue;
+        const normalized = String(value).trim().toLowerCase();
+        if (normalized === 'true' || normalized === '1') return true;
+        if (normalized === 'false' || normalized === '0') return false;
+        return defaultValue;
+    }
 
     function resolveMarkerColor(inputColor) {
         const fallback = '#34A853';
@@ -108,31 +119,41 @@
         try { 
             const drivers = JSON.parse(decodeURIComponent(driversData)); 
             const bounds = new mapboxgl.LngLatBounds(); 
+            let renderedMarkers = 0;
 
             drivers.forEach(driver => { 
+                if (!showImage && !showName && !showLocation) {
+                    return;
+                }
+
                 const container = document.createElement('div'); 
                 container.className = 'marker-container'; 
-
-                const imgDiv = document.createElement('div'); 
-                imgDiv.className = 'marker-image'; 
-                imgDiv.style.backgroundImage = `url(${driver.img})`; 
                 const markerColor = resolveMarkerColor(driver.color);
-                imgDiv.style.borderColor = markerColor; 
 
-                const nameDiv = document.createElement('div'); 
-                nameDiv.className = 'label-name'; 
-                nameDiv.innerText = driver.name; 
-                nameDiv.style.backgroundColor = markerColor;
-                nameDiv.style.setProperty('background', markerColor, 'important');
-                nameDiv.style.color = '#ffffff';
+                if (showImage) {
+                    const imgDiv = document.createElement('div'); 
+                    imgDiv.className = 'marker-image'; 
+                    imgDiv.style.backgroundImage = `url(${driver.img})`; 
+                    imgDiv.style.borderColor = markerColor; 
+                    container.appendChild(imgDiv); 
+                }
 
-                const locDiv = document.createElement('div'); 
-                locDiv.className = 'label-location'; 
-                locDiv.innerText = driver.location; 
+                if (showName) {
+                    const nameDiv = document.createElement('div'); 
+                    nameDiv.className = 'label-name'; 
+                    nameDiv.innerText = driver.name; 
+                    nameDiv.style.backgroundColor = markerColor;
+                    nameDiv.style.setProperty('background', markerColor, 'important');
+                    nameDiv.style.color = '#ffffff';
+                    container.appendChild(nameDiv); 
+                }
 
-                container.appendChild(imgDiv); 
-                container.appendChild(nameDiv); 
-                container.appendChild(locDiv); 
+                if (showLocation) {
+                    const locDiv = document.createElement('div'); 
+                    locDiv.className = 'label-location'; 
+                    locDiv.innerText = driver.location; 
+                    container.appendChild(locDiv); 
+                }
 
                 const coords = [
                     parseFloat(driver.lon), 
@@ -147,9 +168,10 @@
                 .addTo(map); 
 
                 bounds.extend(coords); 
+                renderedMarkers += 1;
             }); 
 
-            if (drivers.length > 0) { 
+            if (renderedMarkers > 0) { 
                 map.fitBounds(bounds, { padding: 100, maxZoom: 15 }); 
             } 
         } catch (e) { 
