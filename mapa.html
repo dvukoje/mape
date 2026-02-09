@@ -296,7 +296,7 @@
                     );
                     const groupLocation = uniqueLocations[0] || '';
 
-                    if (groupLocation) {
+                    if (showLocation && groupLocation) {
                         const locDiv = document.createElement('div');
                         locDiv.className = 'label-location';
                         locDiv.innerText = groupLocation;
