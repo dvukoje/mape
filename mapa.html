@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+﻿<!DOCTYPE html> 
 <html> 
 <head> 
     <meta charset="utf-8"> 
@@ -27,7 +27,7 @@
             width: 140px; 
         } 
 
-        /* Driver Image Pin — slimmed border (Option A) */ 
+        /* Driver Image Pin â€” slimmed border (Option A) */ 
         .marker-image { 
             width: 60px; 
             height: 60px; 
@@ -190,6 +190,38 @@
         return row;
     }
 
+    function buildGroupCountBackground(groupedDrivers) {
+        if (!groupedDrivers || groupedDrivers.length === 0) {
+            return '#34A853';
+        }
+
+        const colorCounts = new Map();
+        groupedDrivers.forEach(driver => {
+            const color = resolveMarkerColor(driver.markerColor);
+            colorCounts.set(color, (colorCounts.get(color) || 0) + 1);
+        });
+
+        if (colorCounts.size === 1) {
+            return Array.from(colorCounts.keys())[0];
+        }
+
+        const total = groupedDrivers.length;
+        const sortedColors = Array.from(colorCounts.entries()).sort((a, b) => b[1] - a[1]);
+        const stops = [];
+        let startPercent = 0;
+
+        sortedColors.forEach(entry => {
+            const color = entry[0];
+            const count = entry[1];
+            const span = (count / total) * 100;
+            const endPercent = startPercent + span;
+            stops.push(`${color} ${startPercent.toFixed(2)}% ${endPercent.toFixed(2)}%`);
+            startPercent = endPercent;
+        });
+
+        return `linear-gradient(90deg, ${stops.join(', ')})`;
+    }
+
     mapboxgl.accessToken = token; 
 
     const map = new mapboxgl.Map({ 
@@ -248,9 +280,10 @@
                 if (multipleDrivers) {
                     const countDiv = document.createElement('div');
                     countDiv.className = 'label-name';
-                    countDiv.innerText = `${groupedDrivers.length} vozaca`;
                     countDiv.style.backgroundColor = markerColor;
-                    countDiv.style.setProperty('background', markerColor, 'important');
+                    countDiv.innerText = groupedDrivers.length + ' vozaca';
+                    countDiv.style.setProperty('background', buildGroupCountBackground(groupedDrivers), 'important');
+                    countDiv.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';
                     countDiv.style.color = '#ffffff';
                     container.appendChild(countDiv);
 
