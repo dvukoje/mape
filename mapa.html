@@ -67,6 +67,45 @@
             text-overflow: ellipsis; 
             font-weight: 500;
         } 
+
+        .group-popup-row {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            max-width: 320px;
+            padding: 2px;
+        }
+
+        .group-popup-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 70px;
+            max-width: 80px;
+        }
+
+        .group-popup-image {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 3px solid #cccccc;
+            background-size: cover;
+            background-position: center;
+            background-color: #f3f3f3;
+            box-sizing: border-box;
+        }
+
+        .group-popup-name {
+            margin-top: 5px;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: center;
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #1a1a1a;
+        }
     </style> 
 </head> 
 
@@ -114,6 +153,43 @@
         }
     }
 
+    function pickValue(obj, primaryKey, fallbackKey) {
+        if (obj && obj[primaryKey] !== undefined && obj[primaryKey] !== null) {
+            return obj[primaryKey];
+        }
+        if (obj && fallbackKey && obj[fallbackKey] !== undefined && obj[fallbackKey] !== null) {
+            return obj[fallbackKey];
+        }
+        return '';
+    }
+
+    function buildGroupPopupContent(groupedDrivers) {
+        const row = document.createElement('div');
+        row.className = 'group-popup-row';
+
+        groupedDrivers.forEach(driver => {
+            const card = document.createElement('div');
+            card.className = 'group-popup-card';
+
+            const image = document.createElement('div');
+            image.className = 'group-popup-image';
+            image.style.borderColor = driver.markerColor;
+            if (driver.driverImage) {
+                image.style.backgroundImage = `url(${driver.driverImage})`;
+            }
+
+            const name = document.createElement('div');
+            name.className = 'group-popup-name';
+            name.innerText = (driver.driverName || '').trim() || 'Bez imena';
+
+            card.appendChild(image);
+            card.appendChild(name);
+            row.appendChild(card);
+        });
+
+        return row;
+    }
+
     mapboxgl.accessToken = token; 
 
     const map = new mapboxgl.Map({ 
@@ -129,62 +205,152 @@
             const drivers = Array.isArray(parsedDrivers) ? parsedDrivers : [parsedDrivers];
             const bounds = new mapboxgl.LngLatBounds(); 
             let renderedMarkers = 0;
+            const groupedByCoords = new Map();
+            let activeGroupPopup = null;
+            let activeGroupKey = '';
 
             drivers.forEach(driver => { 
-                if (!showImage && !showName && !showLocation) {
-                    return;
-                }
+                const lon = parseFloat(pickValue(driver, 'v', 'lon'));
+                const lat = parseFloat(pickValue(driver, 's', 'lat'));
 
-                const container = document.createElement('div'); 
-                container.className = 'marker-container'; 
-                const markerColor = resolveMarkerColor(driver.c ?? driver.color);
-                const driverImage = driver.i ?? driver.img;
-                const driverName = driver.n ?? driver.name;
-                const driverLocation = driver.l ?? driver.location;
-
-                if (showImage) {
-                    const imgDiv = document.createElement('div'); 
-                    imgDiv.className = 'marker-image'; 
-                    imgDiv.style.backgroundImage = `url(${driverImage})`; 
-                    imgDiv.style.borderColor = markerColor; 
-                    container.appendChild(imgDiv); 
-                }
-
-                if (showName) {
-                    const nameDiv = document.createElement('div'); 
-                    nameDiv.className = 'label-name'; 
-                    nameDiv.innerText = driverName; 
-                    nameDiv.style.backgroundColor = markerColor;
-                    nameDiv.style.setProperty('background', markerColor, 'important');
-                    nameDiv.style.color = '#ffffff';
-                    container.appendChild(nameDiv); 
-                }
-
-                if (showLocation) {
-                    const locDiv = document.createElement('div'); 
-                    locDiv.className = 'label-location'; 
-                    locDiv.innerText = driverLocation; 
-                    container.appendChild(locDiv); 
-                }
-
-                const lon = parseFloat(driver.v ?? driver.lon);
-                const lat = parseFloat(driver.s ?? driver.lat);
                 if (Number.isNaN(lon) || Number.isNaN(lat)) {
                     return;
                 }
 
-                const coords = [lon, lat];
+                const key = `${lon.toFixed(6)},${lat.toFixed(6)}`;
+                if (!groupedByCoords.has(key)) {
+                    groupedByCoords.set(key, {
+                        coords: [lon, lat],
+                        drivers: []
+                    });
+                }
 
-                new mapboxgl.Marker({ 
+                groupedByCoords.get(key).drivers.push({
+                    markerColor: resolveMarkerColor(pickValue(driver, 'c', 'color')),
+                    driverImage: pickValue(driver, 'i', 'img'),
+                    driverName: pickValue(driver, 'n', 'name'),
+                    driverLocation: pickValue(driver, 'l', 'location')
+                });
+            });
+
+            groupedByCoords.forEach((group, groupKey) => {
+                if (!showImage && !showName && !showLocation) {
+                    return;
+                }
+
+                const groupedDrivers = group.drivers;
+                const multipleDrivers = groupedDrivers.length > 1;
+                const primaryDriver = groupedDrivers[0];
+                const container = document.createElement('div'); 
+                container.className = 'marker-container'; 
+                const markerColor = primaryDriver.markerColor;
+
+                if (multipleDrivers) {
+                    const countDiv = document.createElement('div');
+                    countDiv.className = 'label-name';
+                    countDiv.innerText = `${groupedDrivers.length} vozaca`;
+                    countDiv.style.backgroundColor = markerColor;
+                    countDiv.style.setProperty('background', markerColor, 'important');
+                    countDiv.style.color = '#ffffff';
+                    container.appendChild(countDiv);
+
+                    const uniqueLocations = Array.from(
+                        new Set(
+                            groupedDrivers
+                                .map(item => String(item.driverLocation || '').trim())
+                                .filter(Boolean)
+                        )
+                    );
+                    const groupLocation = uniqueLocations[0] || '';
+
+                    if (groupLocation) {
+                        const locDiv = document.createElement('div');
+                        locDiv.className = 'label-location';
+                        locDiv.innerText = groupLocation;
+                        container.appendChild(locDiv);
+                    }
+                } else {
+                    if (showImage && primaryDriver.driverImage) {
+                        const imgDiv = document.createElement('div');
+                        imgDiv.className = 'marker-image';
+                        imgDiv.style.backgroundImage = `url(${primaryDriver.driverImage})`;
+                        imgDiv.style.borderColor = markerColor;
+                        container.appendChild(imgDiv);
+                    }
+
+                    if (showName && primaryDriver.driverName) {
+                        const nameDiv = document.createElement('div');
+                        nameDiv.className = 'label-name';
+                        nameDiv.innerText = primaryDriver.driverName;
+                        nameDiv.style.backgroundColor = markerColor;
+                        nameDiv.style.setProperty('background', markerColor, 'important');
+                        nameDiv.style.color = '#ffffff';
+                        container.appendChild(nameDiv);
+                    }
+
+                    if (showLocation && primaryDriver.driverLocation) {
+                        const locDiv = document.createElement('div');
+                        locDiv.className = 'label-location';
+                        locDiv.innerText = primaryDriver.driverLocation;
+                        container.appendChild(locDiv);
+                    }
+                }
+
+                const coords = group.coords;
+                if (container.childElementCount === 0) {
+                    return;
+                }
+
+                const marker = new mapboxgl.Marker({ 
                     element: container, 
                     anchor: 'bottom' 
                 }) 
                 .setLngLat(coords) 
                 .addTo(map); 
 
+                if (multipleDrivers) {
+                    marker.getElement().style.cursor = 'pointer';
+                    marker.getElement().addEventListener('click', function(e) {
+                        e.stopPropagation();
+
+                        if (activeGroupPopup && activeGroupKey === groupKey) {
+                            activeGroupPopup.remove();
+                            activeGroupPopup = null;
+                            activeGroupKey = '';
+                            return;
+                        }
+
+                        if (activeGroupPopup) {
+                            activeGroupPopup.remove();
+                            activeGroupPopup = null;
+                            activeGroupKey = '';
+                        }
+
+                        const popup = new mapboxgl.Popup({
+                            closeButton: true,
+                            closeOnClick: true,
+                            maxWidth: '360px',
+                            offset: 18
+                        })
+                            .setLngLat(coords)
+                            .setDOMContent(buildGroupPopupContent(groupedDrivers))
+                            .addTo(map);
+
+                        activeGroupPopup = popup;
+                        activeGroupKey = groupKey;
+
+                        popup.on('close', function() {
+                            if (activeGroupPopup === popup) {
+                                activeGroupPopup = null;
+                                activeGroupKey = '';
+                            }
+                        });
+                    });
+                }
+
                 bounds.extend(coords); 
                 renderedMarkers += 1;
-            }); 
+            });
 
             if (renderedMarkers > 0) { 
                 map.fitBounds(bounds, { padding: 100, maxZoom: 15 }); 
