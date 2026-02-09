@@ -128,12 +128,15 @@
 
                 const container = document.createElement('div'); 
                 container.className = 'marker-container'; 
-                const markerColor = resolveMarkerColor(driver.color);
+                const markerColor = resolveMarkerColor(driver.c ?? driver.color);
+                const driverImage = driver.i ?? driver.img;
+                const driverName = driver.n ?? driver.name;
+                const driverLocation = driver.l ?? driver.location;
 
                 if (showImage) {
                     const imgDiv = document.createElement('div'); 
                     imgDiv.className = 'marker-image'; 
-                    imgDiv.style.backgroundImage = `url(${driver.img})`; 
+                    imgDiv.style.backgroundImage = `url(${driverImage})`; 
                     imgDiv.style.borderColor = markerColor; 
                     container.appendChild(imgDiv); 
                 }
@@ -141,7 +144,7 @@
                 if (showName) {
                     const nameDiv = document.createElement('div'); 
                     nameDiv.className = 'label-name'; 
-                    nameDiv.innerText = driver.name; 
+                    nameDiv.innerText = driverName; 
                     nameDiv.style.backgroundColor = markerColor;
                     nameDiv.style.setProperty('background', markerColor, 'important');
                     nameDiv.style.color = '#ffffff';
@@ -151,7 +154,7 @@
                 if (showLocation) {
                     const locDiv = document.createElement('div'); 
                     locDiv.className = 'label-location'; 
-                    locDiv.innerText = driver.location; 
+                    locDiv.innerText = driverLocation; 
                     container.appendChild(locDiv); 
                 }
 
