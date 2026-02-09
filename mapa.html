@@ -106,6 +106,14 @@
         return probe.style.color ? candidate : fallback;
     }
 
+    function safeDecodeParam(value) {
+        try {
+            return decodeURIComponent(value);
+        } catch (_) {
+            return value;
+        }
+    }
+
     mapboxgl.accessToken = token; 
 
     const map = new mapboxgl.Map({ 
@@ -117,7 +125,8 @@
 
     if (driversData) { 
         try { 
-            const drivers = JSON.parse(decodeURIComponent(driversData)); 
+            const parsedDrivers = JSON.parse(safeDecodeParam(driversData));
+            const drivers = Array.isArray(parsedDrivers) ? parsedDrivers : [parsedDrivers];
             const bounds = new mapboxgl.LngLatBounds(); 
             let renderedMarkers = 0;
 
@@ -158,10 +167,13 @@
                     container.appendChild(locDiv); 
                 }
 
-                const coords = [
-                    parseFloat(driver.lon), 
-                    parseFloat(driver.lat)
-                ]; 
+                const lon = parseFloat(driver.v ?? driver.lon);
+                const lat = parseFloat(driver.s ?? driver.lat);
+                if (Number.isNaN(lon) || Number.isNaN(lat)) {
+                    return;
+                }
+
+                const coords = [lon, lat];
 
                 new mapboxgl.Marker({ 
                     element: container, 
