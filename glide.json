@@ -1,0 +1,12 @@
+{
+  "name": "GitHub Data Sync",
+  "description": "Pushes JSON data to a GitHub repository",
+  "author": "Darko",
+  "params": [
+    {
+      "name": "configString",
+      "displayName": "Config (Data|Token|Owner|Repo)",
+      "type": "string"
+    }
+  ]
+}
