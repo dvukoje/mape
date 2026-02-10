@@ -1,11 +1,13 @@
-window.glide = async function(jsonData, githubToken, repoOwner, repoName) {
-  if (!jsonData) return "No data";
+window.glide = async function(configString) {
+  if (!configString) return "No config provided";
 
-  const filePath = "data.json"; // Path in your repo
+  // Unpack the parameters
+  const [jsonData, githubToken, repoOwner, repoName] = configString.split('|');
+  const filePath = "data.json";
   const url = `https://api.github.com/repos/${repoOwner}/${repoName}/contents/${filePath}`;
 
   try {
-    // 1. Get the current file SHA (required to update existing files)
+    // 1. Fetch existing SHA
     const getFile = await fetch(url, {
       headers: { "Authorization": `Bearer ${githubToken}` }
     });
@@ -16,7 +18,7 @@ window.glide = async function(jsonData, githubToken, repoOwner, repoName) {
       sha = fileData.sha;
     }
 
-    // 2. Update the file
+    // 2. Push updated data
     const response = await fetch(url, {
       method: "PUT",
       headers: {
@@ -24,18 +26,13 @@ window.glide = async function(jsonData, githubToken, repoOwner, repoName) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        message: "Update data.json from Glide",
-        content: btoa(jsonData), // GitHub requires Base64 encoding
-        sha: sha // Include SHA if the file already exists
+        message: "Update via Glide JS Column",
+        content: btoa(unescape(encodeURIComponent(jsonData))), // Safe Base64 encoding
+        sha: sha
       })
     });
 
-    if (!response.ok) {
-      const err = await response.json();
-      return "Error: " + err.message;
-    }
-
-    return "Success: " + new Date().toLocaleTimeString();
+    return response.ok ? `Updated: ${new Date().toLocaleTimeString()}` : "Error: " + response.status;
   } catch (e) {
     return "Failed: " + e.message;
   }
