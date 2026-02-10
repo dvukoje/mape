@@ -116,14 +116,13 @@
 
 <script> 
     const urlParams = new URLSearchParams(window.location.search); 
-    const token = urlParams.get('token'); 
-    const driversData = urlParams.get('data'); 
-    const showImage = parseBooleanParam(urlParams.get('slika'), true);
-    const showName = parseBooleanParam(urlParams.get('ime'), true);
-    const showLocation = parseBooleanParam(urlParams.get('lokacija'), true);
+    const tokenFromUrl = urlParams.get('token');
+    const driversDataFromUrl = urlParams.get('data');
+    const userParam = (urlParams.get('user') || '').trim();
+    const tripIdParam = (urlParams.get('tripId') || '').trim();
 
     function parseBooleanParam(value, defaultValue) {
-        if (value === null) return defaultValue;
+        if (value === null || value === undefined) return defaultValue;
         const normalized = String(value).trim().toLowerCase();
         if (normalized === 'true' || normalized === '1') return true;
         if (normalized === 'false' || normalized === '0') return false;
@@ -163,6 +162,80 @@
             return obj[fallbackKey];
         }
         return '';
+    }
+
+    function parseDriversPayload(rawPayload) {
+        if (rawPayload === null || rawPayload === undefined || rawPayload === '') {
+            return [];
+        }
+
+        if (Array.isArray(rawPayload)) {
+            return rawPayload;
+        }
+
+        if (typeof rawPayload === 'string') {
+            const decoded = safeDecodeParam(rawPayload);
+            const parsed = JSON.parse(decoded);
+            return Array.isArray(parsed) ? parsed : [parsed];
+        }
+
+        return [rawPayload];
+    }
+
+    function resolveFlag(flagName, sessionPayload, defaultValue) {
+        const fromUrl = urlParams.get(flagName);
+        if (fromUrl !== null) {
+            return parseBooleanParam(fromUrl, defaultValue);
+        }
+
+        if (sessionPayload && sessionPayload[flagName] !== undefined && sessionPayload[flagName] !== null) {
+            return parseBooleanParam(sessionPayload[flagName], defaultValue);
+        }
+
+        return defaultValue;
+    }
+
+    async function fetchSessionPayload() {
+        if (!userParam && !tripIdParam) {
+            return null;
+        }
+
+        const query = new URLSearchParams();
+        if (userParam) query.set('user', userParam);
+        if (tripIdParam) query.set('tripId', tripIdParam);
+
+        const response = await fetch(`/map-session?${query.toString()}`, {
+            method: 'GET',
+            cache: 'no-store'
+        });
+
+        if (!response.ok) {
+            throw new Error(`Map session fetch failed (${response.status})`);
+        }
+
+        return response.json();
+    }
+
+    function showStatusMessage(message) {
+        let statusEl = document.getElementById('map-status');
+        if (!statusEl) {
+            statusEl = document.createElement('div');
+            statusEl.id = 'map-status';
+            statusEl.style.position = 'absolute';
+            statusEl.style.top = '12px';
+            statusEl.style.left = '12px';
+            statusEl.style.zIndex = '10';
+            statusEl.style.maxWidth = '420px';
+            statusEl.style.padding = '10px 12px';
+            statusEl.style.background = 'rgba(0,0,0,0.72)';
+            statusEl.style.color = '#fff';
+            statusEl.style.borderRadius = '8px';
+            statusEl.style.fontSize = '13px';
+            statusEl.style.fontWeight = '600';
+            document.body.appendChild(statusEl);
+        }
+
+        statusEl.innerText = message;
     }
 
     function buildGroupPopupContent(groupedDrivers) {
@@ -224,176 +297,223 @@
         return `linear-gradient(90deg, ${stops.join(', ')})`;
     }
 
-    mapboxgl.accessToken = token; 
+    function renderDrivers(map, drivers, options) {
+        const showImage = options.showImage;
+        const showName = options.showName;
+        const showLocation = options.showLocation;
 
-    const map = new mapboxgl.Map({ 
-        container: 'map', 
-        style: 'mapbox://styles/mapbox/streets-v12', 
-        center: [20.4573, 44.8167], 
-        zoom: 12 
-    }); 
+        const bounds = new mapboxgl.LngLatBounds();
+        let renderedMarkers = 0;
+        const groupedByCoords = new Map();
+        let activeGroupPopup = null;
+        let activeGroupKey = '';
 
-    if (driversData) { 
-        try { 
-            const parsedDrivers = JSON.parse(safeDecodeParam(driversData));
-            const drivers = Array.isArray(parsedDrivers) ? parsedDrivers : [parsedDrivers];
-            const bounds = new mapboxgl.LngLatBounds(); 
-            let renderedMarkers = 0;
-            const groupedByCoords = new Map();
-            let activeGroupPopup = null;
-            let activeGroupKey = '';
+        drivers.forEach(driver => {
+            const lon = parseFloat(pickValue(driver, 'v', 'lon'));
+            const lat = parseFloat(pickValue(driver, 's', 'lat'));
 
-            drivers.forEach(driver => { 
-                const lon = parseFloat(pickValue(driver, 'v', 'lon'));
-                const lat = parseFloat(pickValue(driver, 's', 'lat'));
+            if (Number.isNaN(lon) || Number.isNaN(lat)) {
+                return;
+            }
 
-                if (Number.isNaN(lon) || Number.isNaN(lat)) {
-                    return;
-                }
-
-                const key = `${lon.toFixed(6)},${lat.toFixed(6)}`;
-                if (!groupedByCoords.has(key)) {
-                    groupedByCoords.set(key, {
-                        coords: [lon, lat],
-                        drivers: []
-                    });
-                }
-
-                groupedByCoords.get(key).drivers.push({
-                    markerColor: resolveMarkerColor(pickValue(driver, 'c', 'color')),
-                    driverImage: pickValue(driver, 'i', 'img'),
-                    driverName: pickValue(driver, 'n', 'name'),
-                    driverLocation: pickValue(driver, 'l', 'location')
+            const key = `${lon.toFixed(6)},${lat.toFixed(6)}`;
+            if (!groupedByCoords.has(key)) {
+                groupedByCoords.set(key, {
+                    coords: [lon, lat],
+                    drivers: []
                 });
+            }
+
+            groupedByCoords.get(key).drivers.push({
+                markerColor: resolveMarkerColor(pickValue(driver, 'c', 'color')),
+                driverImage: pickValue(driver, 'i', 'img'),
+                driverName: pickValue(driver, 'n', 'name'),
+                driverLocation: pickValue(driver, 'l', 'location')
             });
+        });
 
-            groupedByCoords.forEach((group, groupKey) => {
-                if (!showImage && !showName && !showLocation) {
-                    return;
+        groupedByCoords.forEach((group, groupKey) => {
+            if (!showImage && !showName && !showLocation) {
+                return;
+            }
+
+            const groupedDrivers = group.drivers;
+            const multipleDrivers = groupedDrivers.length > 1;
+            const primaryDriver = groupedDrivers[0];
+            const container = document.createElement('div');
+            container.className = 'marker-container';
+            const markerColor = primaryDriver.markerColor;
+
+            if (multipleDrivers) {
+                const countDiv = document.createElement('div');
+                countDiv.className = 'label-name';
+                countDiv.style.backgroundColor = markerColor;
+                countDiv.innerText = groupedDrivers.length + ' vozaca';
+                countDiv.style.setProperty('background', buildGroupCountBackground(groupedDrivers), 'important');
+                countDiv.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';
+                countDiv.style.color = '#ffffff';
+                container.appendChild(countDiv);
+
+                const uniqueLocations = Array.from(
+                    new Set(
+                        groupedDrivers
+                            .map(item => String(item.driverLocation || '').trim())
+                            .filter(Boolean)
+                    )
+                );
+                const groupLocation = uniqueLocations[0] || '';
+
+                if (showLocation && groupLocation) {
+                    const locDiv = document.createElement('div');
+                    locDiv.className = 'label-location';
+                    locDiv.innerText = groupLocation;
+                    container.appendChild(locDiv);
+                }
+            } else {
+                if (showImage && primaryDriver.driverImage) {
+                    const imgDiv = document.createElement('div');
+                    imgDiv.className = 'marker-image';
+                    imgDiv.style.backgroundImage = `url(${primaryDriver.driverImage})`;
+                    imgDiv.style.borderColor = markerColor;
+                    container.appendChild(imgDiv);
                 }
 
-                const groupedDrivers = group.drivers;
-                const multipleDrivers = groupedDrivers.length > 1;
-                const primaryDriver = groupedDrivers[0];
-                const container = document.createElement('div'); 
-                container.className = 'marker-container'; 
-                const markerColor = primaryDriver.markerColor;
-
-                if (multipleDrivers) {
-                    const countDiv = document.createElement('div');
-                    countDiv.className = 'label-name';
-                    countDiv.style.backgroundColor = markerColor;
-                    countDiv.innerText = groupedDrivers.length + ' vozaca';
-                    countDiv.style.setProperty('background', buildGroupCountBackground(groupedDrivers), 'important');
-                    countDiv.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';
-                    countDiv.style.color = '#ffffff';
-                    container.appendChild(countDiv);
-
-                    const uniqueLocations = Array.from(
-                        new Set(
-                            groupedDrivers
-                                .map(item => String(item.driverLocation || '').trim())
-                                .filter(Boolean)
-                        )
-                    );
-                    const groupLocation = uniqueLocations[0] || '';
-
-                    if (showLocation && groupLocation) {
-                        const locDiv = document.createElement('div');
-                        locDiv.className = 'label-location';
-                        locDiv.innerText = groupLocation;
-                        container.appendChild(locDiv);
-                    }
-                } else {
-                    if (showImage && primaryDriver.driverImage) {
-                        const imgDiv = document.createElement('div');
-                        imgDiv.className = 'marker-image';
-                        imgDiv.style.backgroundImage = `url(${primaryDriver.driverImage})`;
-                        imgDiv.style.borderColor = markerColor;
-                        container.appendChild(imgDiv);
-                    }
-
-                    if (showName && primaryDriver.driverName) {
-                        const nameDiv = document.createElement('div');
-                        nameDiv.className = 'label-name';
-                        nameDiv.innerText = primaryDriver.driverName;
-                        nameDiv.style.backgroundColor = markerColor;
-                        nameDiv.style.setProperty('background', markerColor, 'important');
-                        nameDiv.style.color = '#ffffff';
-                        container.appendChild(nameDiv);
-                    }
-
-                    if (showLocation && primaryDriver.driverLocation) {
-                        const locDiv = document.createElement('div');
-                        locDiv.className = 'label-location';
-                        locDiv.innerText = primaryDriver.driverLocation;
-                        container.appendChild(locDiv);
-                    }
+                if (showName && primaryDriver.driverName) {
+                    const nameDiv = document.createElement('div');
+                    nameDiv.className = 'label-name';
+                    nameDiv.innerText = primaryDriver.driverName;
+                    nameDiv.style.backgroundColor = markerColor;
+                    nameDiv.style.setProperty('background', markerColor, 'important');
+                    nameDiv.style.color = '#ffffff';
+                    container.appendChild(nameDiv);
                 }
 
-                const coords = group.coords;
-                if (container.childElementCount === 0) {
-                    return;
+                if (showLocation && primaryDriver.driverLocation) {
+                    const locDiv = document.createElement('div');
+                    locDiv.className = 'label-location';
+                    locDiv.innerText = primaryDriver.driverLocation;
+                    container.appendChild(locDiv);
                 }
+            }
 
-                const marker = new mapboxgl.Marker({ 
-                    element: container, 
-                    anchor: 'bottom' 
-                }) 
-                .setLngLat(coords) 
-                .addTo(map); 
+            const coords = group.coords;
+            if (container.childElementCount === 0) {
+                return;
+            }
 
-                if (multipleDrivers) {
-                    marker.getElement().style.cursor = 'pointer';
-                    marker.getElement().addEventListener('click', function(e) {
-                        e.stopPropagation();
+            const marker = new mapboxgl.Marker({
+                element: container,
+                anchor: 'bottom'
+            })
+            .setLngLat(coords)
+            .addTo(map);
 
-                        if (activeGroupPopup && activeGroupKey === groupKey) {
-                            activeGroupPopup.remove();
+            if (multipleDrivers) {
+                marker.getElement().style.cursor = 'pointer';
+                marker.getElement().addEventListener('click', function(e) {
+                    e.stopPropagation();
+
+                    if (activeGroupPopup && activeGroupKey === groupKey) {
+                        activeGroupPopup.remove();
+                        activeGroupPopup = null;
+                        activeGroupKey = '';
+                        return;
+                    }
+
+                    if (activeGroupPopup) {
+                        activeGroupPopup.remove();
+                        activeGroupPopup = null;
+                        activeGroupKey = '';
+                    }
+
+                    const popup = new mapboxgl.Popup({
+                        closeButton: true,
+                        closeOnClick: true,
+                        maxWidth: '360px',
+                        offset: 18
+                    })
+                        .setLngLat(coords)
+                        .setDOMContent(buildGroupPopupContent(groupedDrivers))
+                        .addTo(map);
+
+                    activeGroupPopup = popup;
+                    activeGroupKey = groupKey;
+
+                    popup.on('close', function() {
+                        if (activeGroupPopup === popup) {
                             activeGroupPopup = null;
                             activeGroupKey = '';
-                            return;
                         }
-
-                        if (activeGroupPopup) {
-                            activeGroupPopup.remove();
-                            activeGroupPopup = null;
-                            activeGroupKey = '';
-                        }
-
-                        const popup = new mapboxgl.Popup({
-                            closeButton: true,
-                            closeOnClick: true,
-                            maxWidth: '360px',
-                            offset: 18
-                        })
-                            .setLngLat(coords)
-                            .setDOMContent(buildGroupPopupContent(groupedDrivers))
-                            .addTo(map);
-
-                        activeGroupPopup = popup;
-                        activeGroupKey = groupKey;
-
-                        popup.on('close', function() {
-                            if (activeGroupPopup === popup) {
-                                activeGroupPopup = null;
-                                activeGroupKey = '';
-                            }
-                        });
                     });
-                }
+                });
+            }
 
-                bounds.extend(coords); 
-                renderedMarkers += 1;
-            });
+            bounds.extend(coords);
+            renderedMarkers += 1;
+        });
 
-            if (renderedMarkers > 0) { 
-                map.fitBounds(bounds, { padding: 100, maxZoom: 15 }); 
-            } 
-        } catch (e) { 
-            console.error("Error parsing driver data", e); 
-        } 
-    } 
+        if (renderedMarkers > 0) {
+            map.fitBounds(bounds, { padding: 100, maxZoom: 15 });
+        } else {
+            showStatusMessage('Nema validnih koordinata za prikaz.');
+        }
+    }
+
+    async function bootstrap() {
+        let sessionPayload = null;
+
+        if (userParam || tripIdParam) {
+            try {
+                sessionPayload = await fetchSessionPayload();
+            } catch (error) {
+                console.error('Error loading map session', error);
+                showStatusMessage('Podaci za mapu nisu dostupni ili su vec istekli.');
+                return;
+            }
+        }
+
+        const token = (tokenFromUrl || (sessionPayload && sessionPayload.token) || '').trim();
+        const showImage = resolveFlag('slika', sessionPayload, true);
+        const showName = resolveFlag('ime', sessionPayload, true);
+        const showLocation = resolveFlag('lokacija', sessionPayload, true);
+
+        let drivers = [];
+        try {
+            if (driversDataFromUrl) {
+                drivers = parseDriversPayload(driversDataFromUrl);
+            } else if (sessionPayload && sessionPayload.drivers !== undefined) {
+                drivers = parseDriversPayload(sessionPayload.drivers);
+            } else if (sessionPayload && sessionPayload.data !== undefined) {
+                drivers = parseDriversPayload(sessionPayload.data);
+            }
+        } catch (error) {
+            console.error('Error parsing driver data', error);
+            showStatusMessage('Podaci o vozacima nisu u ispravnom formatu.');
+            return;
+        }
+
+        if (!token) {
+            showStatusMessage('Nedostaje Mapbox token za prikaz mape.');
+            return;
+        }
+
+        mapboxgl.accessToken = token;
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [20.4573, 44.8167],
+            zoom: 12
+        });
+
+        if (!drivers.length) {
+            showStatusMessage('Nema aktivnih vozaca za prikaz.');
+            return;
+        }
+
+        renderDrivers(map, drivers, { showImage, showName, showLocation });
+    }
+
+    bootstrap();
 </script> 
 </body> 
 </html>
