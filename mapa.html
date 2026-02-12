@@ -164,6 +164,47 @@
         return '';
     }
 
+    function normalizeGroupType(value) {
+        const normalized = String(value || '').trim().toLowerCase();
+        if (!normalized) return '';
+
+        if (normalized === 'roba' || normalized === 'robe' || normalized === 'cargo' || normalized === 'goods' || normalized === 'teret') {
+            return 'cargo';
+        }
+
+        if (normalized === 'vozac' || normalized === 'vozaca' || normalized === 'vozaci' || normalized === 'vozači' || normalized === 'driver' || normalized === 'drivers') {
+            return 'driver';
+        }
+
+        return '';
+    }
+
+    function inferGroupTypeFromItems(items) {
+        if (!Array.isArray(items) || items.length === 0) {
+            return 'driver';
+        }
+
+        const hasAnyImage = items.some(item => {
+            const image = String(pickValue(item, 'i', 'img') || '').trim();
+            return Boolean(image);
+        });
+
+        return hasAnyImage ? 'driver' : 'cargo';
+    }
+
+    function formatGroupedCountLabel(count, groupType) {
+        const numericCount = Number(count);
+
+        if (groupType === 'cargo') {
+            if (numericCount >= 2 && numericCount <= 4) {
+                return `${numericCount} robe`;
+            }
+            return `${numericCount} roba`;
+        }
+
+        return `${numericCount} vozaca`;
+    }
+
     function parseDriversPayload(rawPayload) {
         if (rawPayload === null || rawPayload === undefined || rawPayload === '') {
             return [];
@@ -301,6 +342,7 @@
         const showImage = options.showImage;
         const showName = options.showName;
         const showLocation = options.showLocation;
+        const resolvedGroupType = normalizeGroupType(options.groupType) || inferGroupTypeFromItems(drivers);
 
         const bounds = new mapboxgl.LngLatBounds();
         let renderedMarkers = 0;
@@ -348,7 +390,7 @@
                 const countDiv = document.createElement('div');
                 countDiv.className = 'label-name';
                 countDiv.style.backgroundColor = markerColor;
-                countDiv.innerText = groupedDrivers.length + ' vozaca';
+                countDiv.innerText = formatGroupedCountLabel(groupedDrivers.length, resolvedGroupType);
                 countDiv.style.setProperty('background', buildGroupCountBackground(groupedDrivers), 'important');
                 countDiv.style.textShadow = '0 1px 2px rgba(0,0,0,0.45)';
                 countDiv.style.color = '#ffffff';
@@ -476,6 +518,7 @@
         const showImage = resolveFlag('slika', sessionPayload, true);
         const showName = resolveFlag('ime', sessionPayload, true);
         const showLocation = resolveFlag('lokacija', sessionPayload, true);
+        const groupType = normalizeGroupType(urlParams.get('tip') || (sessionPayload && sessionPayload.tip));
 
         let drivers = [];
         try {
@@ -510,7 +553,7 @@
             return;
         }
 
-        renderDrivers(map, drivers, { showImage, showName, showLocation });
+        renderDrivers(map, drivers, { showImage, showName, showLocation, groupType });
     }
 
     bootstrap();

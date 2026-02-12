@@ -145,7 +145,8 @@ function normalizePayload(body) {
       drivers: body,
       slika: undefined,
       ime: undefined,
-      lokacija: undefined
+      lokacija: undefined,
+      tip: undefined
     };
   }
 
@@ -156,7 +157,8 @@ function normalizePayload(body) {
     drivers: parseDrivers(driversSource),
     slika: parseBoolean(body.slika),
     ime: parseBoolean(body.ime),
-    lokacija: parseBoolean(body.lokacija)
+    lokacija: parseBoolean(body.lokacija),
+    tip: sanitizeString(body.tip)
   };
 }
 
@@ -265,6 +267,7 @@ app.post('/map-session', async (req, res) => {
       slika: body.slika !== undefined ? body.slika : req.query.slika,
       ime: body.ime !== undefined ? body.ime : req.query.ime,
       lokacija: body.lokacija !== undefined ? body.lokacija : req.query.lokacija,
+      tip: body.tip !== undefined ? body.tip : req.query.tip,
       data: body.data !== undefined ? body.data : req.query.data
     });
 
@@ -280,6 +283,7 @@ app.post('/map-session', async (req, res) => {
       slika: payload.slika,
       ime: payload.ime,
       lokacija: payload.lokacija,
+      tip: payload.tip,
       createdAt: new Date().toISOString()
     }, ttlSec);
 
